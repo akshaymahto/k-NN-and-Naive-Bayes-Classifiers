@@ -1,0 +1,224 @@
+---
+title: "Corona_NLP_train.Rmd"
+author: "akshay"
+date: "2024-10-12"
+output: html_document
+---
+```
+1. (0.1pt) Read the data and store in the dataframe. Take a look at the structure of data
+and its variables. We will be working with only two variables: OriginalTweet and Sentiment.
+Original tweet is a text and Sentiment is a categorical variable with five levels: “extremely
+positive”, “positive”, “neutral”, “negative”, and “extremely negative”. Note: The original tweet
+variable has some accented character strings. Set fileEncoding=”latin1” parameter inside the
+read.csv method to ensure those characters are read correctly.
+```
+
+```{r}
+# Load the dataset
+tweets_df <- read.csv("Corona_NLP_train.csv", fileEncoding="latin1")
+
+# Take a look at the structure of the data
+str(tweets_df)
+
+```
+```{r}
+str(tweets_df)
+```
+
+```
+2.(0.1pts) Set the seed of the random number generator to a fixed integer, say 1, so that I can
+reproduce your work: set.seed(1). Then, randomize the order of the rows in the dataset.
+
+```
+```{r}
+set.seed(1)
+tweets_df <- tweets_df[sample(nrow(tweets_df)), ]
+
+```
+```
+3. (0.2pts)Convert sentiment into a factor variable with three levels: “positive”, “neutral”,
+and “negative”. You can do this by labeling all “positive” and “extremely positive” tweets as
+“positive” and all “negative” and “extremely negative” tweets as “negative”. Then, take the
+summary of sentiment to see how many observations/tweets you have for each label.
+
+```
+
+```{r}
+# Recode Sentiment into three levels
+tweets_df$Sentiment <- factor(ifelse(tweets_df$Sentiment %in% c("Extremely Positive", "Positive"), "positive", 
+                                     ifelse(tweets_df$Sentiment %in% c("Extremely Negative", "Negative"), "negative", "neutral")),
+                              levels = c("positive", "neutral", "negative"))
+
+# Check the summary of sentiment
+summary(tweets_df$Sentiment)
+
+```
+
+```
+4. (0.5pts) Create a text corpus from OriginalTweet variable. Then clean the corpus, i.e., convert
+all tweets to lowercase, perform stemming, remove stop words, remove punctuation, and a remove
+additional white spaces.
+
+```
+
+```{r}
+
+# Load the required libraries
+library(tm)
+library(SnowballC)
+
+# Create a text corpus from the 'OriginalTweet' column
+corpus <- Corpus(VectorSource(tweets_df$OriginalTweet))
+
+
+# Text cleaning: lowercase, remove punctuation, numbers, stopwords, and stem
+corpus <- tm_map(corpus, content_transformer(tolower))          # Convert to lowercase
+corpus <- tm_map(corpus, removePunctuation)                     # Remove punctuation
+corpus <- tm_map(corpus, removeNumbers)                         # Remove numbers
+corpus <- tm_map(corpus, removeWords, stopwords("en"))          # Remove stopwords
+corpus <- tm_map(corpus, stripWhitespace)                       # Remove extra whitespace
+corpus <- tm_map(corpus, stemDocument)                          # Perform stemming
+
+# Inspect the cleaned corpus
+inspect(corpus[1:5])  # View the first 5 cleaned tweets
+
+
+```
+
+```
+5. (0.5pts) Create separate wordclouds for “positive” and “negative” tweets (set “max.words=100”
+to only show the 100 most frequent words). Is there any visible difference between the frequent
+words in “positive” vs. “negative” tweets?
+```
+
+
+```{r}
+library(wordcloud)
+wordcloud(corpus, max.words = 100, random.order = FALSE)
+
+# Split the dataset into positive and negative tweets
+positive_tweets <- tweets_df$OriginalTweet[tweets_df$Sentiment == "positive"]
+negative_tweets <- tweets_df$OriginalTweet[tweets_df$Sentiment == "negative"]
+
+# Generate word clouds
+wordcloud(positive_tweets, max.words = 100, scale = c(3,0.5))
+wordcloud(negative_tweets, max.words = 100, scale = c(3,0.5))
+
+
+```
+```{r}
+wordcloud(corpus, max.words = 100)
+
+```
+
+
+
+```
+6. (0.5pts) Create a document-term matrix from the cleaned corpus. Then split the data into
+train and test sets. Use the first 32925 rows (roughly 80% of samples) for training and the rest
+for testing.
+
+
+```
+```{r}
+
+
+# Create a document-term matrix
+dtm <- DocumentTermMatrix(corpus)
+
+# Split into train and test sets (80% train, 20% test)
+train_indices <- 1:32925
+train_dtm <- dtm[train_indices, ]
+test_dtm <- dtm[-train_indices, ]
+
+# Get the corresponding train and test labels
+train_labels <- tweets_df$Sentiment[train_indices]
+test_labels <- tweets_df$Sentiment[-train_indices]
+
+```
+
+
+```
+7. (0.5pts) Remove the words that appear less than 50 times in the training data (Note: use
+findFreqTerms in week 5 demo codes). And convert frequencies in the document-term matrix
+to binary yes/no features (one-hot encoding).
+
+```
+
+```{r}
+# Find frequent terms that appear at least 50 times
+freq_terms <- findFreqTerms(train_dtm, 50)
+
+# Reduce the DTM to only include frequent terms
+train_dtm_freq <- train_dtm[, freq_terms]
+test_dtm_freq <- test_dtm[, freq_terms]
+
+# Convert the counts to binary (1/0)
+convert_counts <- function(x) {
+  x <- ifelse(x > 0, 1, 0)
+  x <- factor(x, levels = c(0, 1), labels = c("No", "Yes"))
+  return(x)
+}
+
+train_dtm_binary <- apply(train_dtm_freq, 2, convert_counts)
+test_dtm_binary <- apply(test_dtm_freq, 2, convert_counts)
+
+
+```
+```
+8. (0.8pts) Train a Na ̈ıve Bayes classifier on the training data and evaluate its performance on
+the test data. Plot a cross table between the model’s predictions on the test data and the true
+test labels.
+```
+
+```{r}
+library(e1071)
+
+
+model <- naiveBayes(train_dtm_binary, train_labels)
+predictions <- predict(model, test_dtm_binary)
+```
+
+
+
+```
+9. (0.4pts) Based on the cross table you plot above, what is the overall accuracy of the model?
+(the percentage of correct predictions).
+
+```
+
+```{r}
+# Calculate the overall accuracy
+accuracy <- sum(predictions == test_labels) / length(test_labels)
+accuracy
+```
+
+```
+10. (0.4pts) Based on the cross table you plot above, what is the precision and recall of the
+model in each category (negative, positive, neutral)?
+
+```
+
+```{r}
+# Function to calculate precision and recall
+precision_recall <- function(conf_matrix, class_label) {
+  tp <- conf_matrix[class_label, class_label]       # True Positive
+  fp <- sum(conf_matrix[class_label, ]) - tp        # False Positive
+  fn <- sum(conf_matrix[, class_label]) - tp        # False Negative
+  
+  precision <- tp / (tp + fp)
+  recall <- tp / (tp + fn)
+  
+  return(list(precision = precision, recall = recall))
+}
+
+# Confusion matrix
+conf_matrix <- table(predictions, test_labels)
+
+# Calculate precision and recall for each class (positive, neutral, negative)
+classes <- c("positive", "neutral", "negative")
+metrics <- lapply(classes, function(x) precision_recall(conf_matrix, x))
+names(metrics) <- classes
+metrics
+```
+

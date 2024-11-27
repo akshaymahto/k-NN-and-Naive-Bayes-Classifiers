@@ -1,0 +1,422 @@
+---
+title: "KNN Marketing Campaign"
+author: "akshay"
+date: "2024-10-12"
+output: html_document
+---
+
+1. (0.1pt) Download the dataset and store it in a dataframe in R. Note: the attributes are separated by semicolon, make sure you set “sep” option correctly inside the function read.csv.In addition, some variables use “unknown” for missing values. Convert all “unknown” values to NA. You can do so by setting “na.strings” parameter to “unknown” when you read the file.
+
+```{r}
+
+library(data.table)
+# Load the dataset
+bank_data <- read.csv("/Users/apple/Desktop/ML Assignment 2/bank-full.csv", sep = ";", na.strings = "unknown")
+
+# Inspect the data structure
+str(bank_data)
+summary(bank_data)
+```
+```{r}
+library(mltools)
+library(data.table)
+library(readr)   
+library(dplyr)   
+library(class)   
+library(caret)   
+library(ggplot2)
+```
+
+```
+2. (0.2pts) Specify the type of each variable as follows:
+– Specify whether the variable is categorical(qualitative) or numeric(quantitative)?
+– For categorical variables, specify whether it is a nominal variable or an ordinal variable.
+– For numerical variables, specify whether it is an interval-scaled variables or a ratio-scaled
+variables?
+```
+
+
+
+```{r}
+colnames(bank_data)
+
+```
+
+```{r}
+str(bank_data)
+# Load the dataset
+
+variable_classification <- sapply(bank_data, class)
+# Function to map detected types to custom classification
+map_variable_type <- function(var_class) {
+  if (var_class == "integer" || var_class == "numeric") {
+    return("numeric, ratio")  # Assuming most numeric types here are ratio
+  } else if (var_class == "factor" || var_class == "character") {
+    return("categorical, nominal")  # Default classification for non-numeric types
+  }
+}
+# Apply the function to classify all variables
+variable_types <- sapply(variable_classification, map_variable_type)
+# Manually adjust any variables if necessary
+# For example, 'day' and 'pdays' might be interval instead of ratio
+variable_types["day"] <- "numeric, interval"
+variable_types["pdays"] <- "numeric, interval"
+# Print the variable types
+print(variable_types)
+
+```
+
+```
+3. (0.2pts) Get the frequency table of the target variable “y” to determine how many observations (examples) are present in each category (y = yes and y = no). Is the target variable “y” balanced? In other words, do both categories (y = yes and y = no) have roughly the same number of observations (examples)?
+```
+
+
+```{r}
+# Frequency table of the target variable 'y'
+table(bank_data$y)
+
+# Check if the data is balanced
+prop.table(table(bank_data$y))
+
+```
+
+```
+
+4. (0.5pts) Explore the data in order to investigate the association between the target variable
+y and other variables in the dataset. Which of the other variables are associated with y? Use
+appropriate plots and statistic tests to answer this question. Check the table at the end of this
+assignment to see which statistic test and plot you should use.
+Based on your data exploration above, keep the variables you have found in q4, which
+have association with the target variable y, and remove the other variables.
+
+```
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(RColorBrewer)
+
+# Custom color palette using Brewer's Set2
+custom_colors <- brewer.pal(3, "Set2")
+
+# Bar plot with custom colors
+ggplot(bank_data, aes(x=marital, fill=y)) +
+  geom_bar(position="dodge", color="black", size=0.5) +  # Add black borders to bars
+  scale_fill_manual(values=custom_colors) +  # Use custom color palette
+  labs(title="Marital Status vs Subscription to Term Deposit",
+       x="Marital Status", y="Count") 
+
+# Chi-square test
+chisq_test_result <- chisq.test(table(bank_data$marital, bank_data$y))
+
+# Print the result of the chi-square test
+print(chisq_test_result)
+
+# Box plot with custom colors
+ggplot(bank_data, aes(x=y, y=age, fill=y)) +
+  geom_boxplot(outlier.color="red", outlier.shape=16, outlier.size=3, alpha=0.7) +  # Customize outliers and transparency
+  scale_fill_manual(values=c("#FF9999", "#66B2FF")) +  # Use custom colors for boxplot
+  labs(title="Age Distribution vs Subscription to Term Deposit",
+       x="Term Deposit Subscription (y)", y="Age") +
+  theme_classic() +  # Apply a classic theme
+  theme(plot.title = element_text(hjust=0.5, face="bold", color="darkblue"), # Center and color title
+        legend.position="none",  # Remove legend
+        axis.title.x = element_text(face="italic"),  # Italicize x-axis label
+        axis.title.y = element_text(face="italic"))  # Italicize y-axis label
+
+```
+
+```
+5. (0.1pt) Use the command colSums(is.na(<your dataframe>)) to get the number of miss-
+ing values in each column of your dataframe. Which columns have missing values?
+```
+
+
+```{r}
+# Check for missing values
+colSums(is.na(bank_data))
+
+```
+
+
+```
+6). 0.4pts) There are several ways we can deal with missing values. The easiest approach is to remove all the rows with missing values. However, if a large number of rows have missing values, then removing them will result in loss of information and may affect the classifier performance. If
+a large number of rows have missing values, then it is typically better to substitute missing values. This is called data imputation. Several methods for missing data imputation exist. The most na ̈ıve method (which we will use here) is to replace the missing values with mean of the column
+(for a numerical column) or mode/majority value of the column (for a categorical column). We will use a more advanced data imputation method in a later module. For now, replace the missing values in a numerical column with the mean of the column and the missing values in a categorical column with the mode/majority of the column. After imputation, use colSums(is.na(<your dataframe>)) to make sure that your dataframe no longer has missing values.
+```
+
+```{r}
+get_mode <- function(x) {
+  return(as.character(names(sort(table(x), decreasing=TRUE)[1])))
+}
+
+# Impute missing values for numeric and categorical columns
+
+for(col in names(bank_data)) {
+  if (is.numeric(bank_data[[col]])) {
+    bank_data[[col]][is.na(bank_data[[col]])] <- mean(bank_data[[col]], na.rm=TRUE)
+  } else {
+    bank_data[[col]][is.na(bank_data[[col]])] <- get_mode(bank_data[[col]])
+  }
+}
+
+colSums(is.na(bank_data))
+```
+
+```
+7. (0.2pts) Set the seed of the random number generator to a fixed integer, say 1, so that I can reproduce your work: set.seed(1). Then, randomize the order of the rows in the dataset.
+
+```
+
+```{r}
+# Set the seed for reproducibility
+set.seed(1)
+bank_data <- bank_data[sample(nrow(bank_data)), ] #randomize the rows
+```
+
+```
+8. (0.3pts) This dataset has several categorical variables. One way to deal with categorical variables is to assign numeric indices to each level. However, this imposes an artificial ordering on an unordered categorical variable. For example, suppose that we have a categorical variable primary color with three levels: “red”, “blue”, “green”. If we convert “red” to 0 , “blue” to 1, and “green” to 2, then we are telling our model that red < blue < green which is not correct. A better way to encode an unordered categorical variable is to do one-hot encoding. In one-hot encoding we create a dummy binary variable for each level of a categorical variable. For example, we can represent the primary color variable by three binary dummy variables, one for each color
+(red, blue, and green). If the color is red, then the variable red takes value 1 while blue and green both take the value 0.
+Do one-hot encoding for all your unordered categorical variables (except the target variable y). You can use the function one hot from “mltools” package. Please refer to this link for usage. Use option “DropUnusedLevels=True” to avoid creating a binary variable for unused levels of a factor variable.
+Please note that the one hot function takes a “data table” not a “dataframe”. You can convert a “dataframe” to “datatable” by using as.data.table method, see this link. Make sure to use “library(data.table)” before using as.data.table method. You can covert a “data table” back to a “dataframe” by using as.data.frame method, see this link
+
+```
+
+```{r}
+# Convert to data.table for one-hot encoding
+bank_data_dt <- as.data.table(bank_data)
+bank_data_encoded <- one_hot(bank_data_dt, dropUnusedLevels=TRUE)
+bank_data <- as.data.frame(bank_data_encoded)
+
+```
+
+```
+9. (0.1pts) Split the data into training and test sets. Use the first 36168 rows for training and
+the rest for testing.
+
+```
+
+```{r}
+# Split into training (first 36168 rows) and test sets
+train_data <- bank_data[1:36168, ]
+test_data <- bank_data[36169:nrow(bank_data), ]
+
+```
+
+```
+10. (0.2pts) Scale all numeric features using z-score normalization. Note: Don’t normalize your
+one-hot encoded variables
+
+```
+
+```{r}
+num_cols <- sapply(train_data, is.numeric)
+train_data[num_cols] <- scale(train_data[num_cols])
+test_data[num_cols] <- scale(test_data[num_cols])
+
+```
+
+```
+11. (1pt) Use 5-fold cross validation with KNN on the training set to predict the “y” variable
+and report the cross-validation accuracy. (Please use crossValidationError function in week
+4 demo codes and modify it to compute accuracy instead of error, where the accuracy is simply
+equal to 1 - error).
+
+```
+
+
+```{r}
+train_control <- trainControl(method = "cv", number = 5)
+
+```
+
+
+```{r}
+set.seed(1)
+knn_model <- train(y ~ ., data = train_data, method = "knn", trControl = train_control, tuneLength = 5)
+
+```
+
+```{r}
+# Print the results
+print(knn_model)
+```
+```{r}
+# Get the cross-validation accuracy
+cv_accuracy <- knn_model$results$Accuracy
+print(paste("Cross-validation accuracy: ", cv_accuracy))
+
+```
+
+```
+12. (1pt) Tune K (the number of nearest neighbors) by trying out different values, i.e., K =
+1, 5, 10, 20, 50, 100, 200. Draw a plot of cross validation accuracy for different values of K.
+Which value of K seems to perform the best on the cross validation? (Note: the higher the cross
+validation accuracy (or the lower the cross validation error), the better the model is. You can
+2
+find a similar example in week 4 demo codes). This question might take several minutes to run
+on your machine, sit tight.
+```
+
+
+```{r}
+# Define the values of K
+best_k <- c(1, 5, 10, 20, 50, 100, 200)
+
+```
+
+```{r}
+# Train the model for each value of K and get the accuracy
+knn_tuning <- train(y ~ ., data = train_data, method = "knn", trControl = train_control, tuneGrid = expand.grid(k = best_k))
+
+```
+```{r}
+plot(knn_tuning) # now, I am going to show the Plot the cross-validation accuracy for different K values
+```
+
+```{r}
+# Best value of K based on cross-validation accuracy
+K_bestvalue <- knn_tuning$bestTune$k
+print(paste("Best K value: ", K_bestvalue))
+
+```
+
+```
+13. (0.5pts) With the best value of K you found above, use knn function to get the predicted
+values for the target variable y in the test set
+
+```
+```{r}
+# Predict on test data using the best K value
+predictions <- predict(knn_tuning, newdata = test_data)
+# Ensure predictions and actual values (test_data$y) are factors
+predictions <- as.factor(predictions)
+test_data$y <- as.factor(test_data$y)
+# Create confusion matrix
+conf_matrix <- confusionMatrix(predictions, test_data$y)
+print(conf_matrix)
+
+# Extract confusion matrix components
+false_positive <- conf_matrix$table[1, 2]  # Predicted "yes" but actual "no"
+false_negative <- conf_matrix$table[2, 1]  # Predicted "no" but actual "yes"
+
+print(paste("False Positive (FP): ", false_positive))
+print(paste("False Negative (FN): ", false_negative))
+
+
+# Calculate accuracy of majority classifier
+majority_classifier_accuracy <- sum(test_data$y == "no") / nrow(test_data)
+print(paste("Majority Classifier Accuracy: ", majority_classifier_accuracy))
+
+# False positives and false negatives for the majority classifier
+majority_fp <- 0  # No false positives since it never predicts "yes"
+majority_fn <- sum(test_data$y == "yes")  # All true "yes" are false negatives
+
+```
+
+
+```{r}
+# False positives and false negatives for the majority classifier
+majority_fp <- 0  # No false positives since it never predicts "yes"
+majority_fn <- sum(test_data$y == "yes")  # All true "yes" are false negatives
+
+```
+
+```{r}
+# Print comparison of FP and FN for majority classifier and KNN
+print(paste("Majority Classifier - False Positive (FP): ", majority_fp))
+```
+
+```{r}
+
+
+print(paste("Majority Classifier - False Negative (FN): ", majority_fn))
+```
+
+```{r}
+
+print(paste("KNN - False Positive (FP): ", false_positive))
+```
+
+```{r}
+
+print(paste("KNN - False Negative (FN): ", false_negative))
+```
+
+
+
+```
+14. (0.5pts) Compare the predicted target (y) with the ground truth target (y) in the test set
+using a cross table.
+```
+```{r}
+cross_table <- table(Predicted = predictions, Actual = test_data$y)
+print(cross_table)
+```
+
+
+```
+15. (0.3pts) Based on the cross table above, what is the False Positive Number and False
+Negative Number of the knn classifier on the test data? False Positive (FP): The number of all
+true negative (y = ”no”) observations that the model incorrectly predicted to be positive (y =
+”yes”). False Negative (FN): The number of all true positive (y = ”yes”) observations that the
+model incorrectly predicted to be negative (y = ”no”).
+```
+```{r}
+False_Positive <- cross_table[1, 2]
+false_negative <- cross_table[2, 1]
+print(paste("The False Positive (FP): ", False_Positive))
+print(paste("The False Negative (FN): ", false_negative))
+```
+
+```
+16. (0.2pts) Consider a majority classifier which predicts y=”no” for all observations in the test
+set. Without writing any code, explain what would be the accuracy of this majority classifier?
+Does KNN do better than this majority classifier?
+```
+```
+Solution:
+A majority classifier that predicts y = "no" for all test observations will be accurate based on the proportion of "no" observations in the test set.
+
+If the test set is highly imbalanced (e.g., more "no" than "yes" cases), the majority classifier accuracy will be high, but it won't be useful for detecting the minority class ("yes").
+
+The accuracy of the majority classifier can be calculated as the proportion of "no" observations in the test set:
+
+Accuracy of majority classifier
+= number of 'no' labels / total number of observations
+ 
+ majority_classifier_accuracy <- sum(test_labels_complete == "no") / length(test_labels_complete)
+cat("Majority Classifier Accuracy: ", majority_classifier_accuracy, "\n")
+
+```
+
+```
+17. (0.2pts) Explain what is the False Positive Number and False Negative Number of the
+majority classifier on the test set and how does it compare to the False Positive Number and
+False Negative Number of the knn model you computed in question 15.
+```
+```
+Solution:
+False Positives and False Negatives for the Majority Classifier
+
+False Positive (FP) for the majority classifier:
+A False Positive occurs when the classifier predicts "yes" but the true value is "no". Since the majority classifier always predicts "no", there will be no False Positives (FP = 0).
+
+False Negative (FN) for the majority classifier:
+A False Negative occurs when the classifier predicts "no" but the true value is "yes". Since the majority classifier predicts "no" for all observations, all observations where the true value is "yes" will be False Negatives. Therefore, the number of FNs will be equal to the total number of true "yes" values in the test set.
+
+KNN Classifier:
+False Positive (FP) for KNN:
+The number of instances where the KNN model incorrectly predicts "yes" when the true label is "no".
+
+False Negative (FN) for KNN:
+The number of instances where the KNN model incorrectly predicts "no" when the true label is "yes".
+
+Comparison:
+FP for Majority Classifier: 0
+FN for Majority Classifier: Total number of true "yes" values in the test set
+FP for KNN: Computed from the confusion matrix for KNN
+FN for KNN: Computed from the confusion matrix for KNN
+Typically, the KNN model should perform better than the majority classifier by having a lower number of False Negatives and a non-zero number of False Positives (since it tries to predict both classes instead of just "no").
+
+```
+
